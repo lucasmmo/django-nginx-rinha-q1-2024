@@ -1,0 +1,57 @@
+services:
+  app1: &app
+    build:
+      context: ./app/
+    # command: >
+    #   sh -c "python manage.py wait_for_db && 
+    #          python manage.py migrate &&
+    #          python manage.py runserver 0.0.0.0:8000"
+    command: >
+      sh -c "python manage.py wait_for_db &&
+             python manage.py migrate &&
+             gunicorn main.asgi --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
+    volumes:
+      - ./app/:/app
+    depends_on:
+      - db
+    deploy:
+      resources:
+        limits:
+          cpus: '0.37'
+          memory: '160MB'
+    env_file:
+        - .env
+
+  app2:
+    <<: *app
+    command: >
+      sh -c "python manage.py wait_for_db &&
+             gunicorn main.asgi --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
+
+  proxy:
+    build:
+      context: ./proxy/ 
+    depends_on:
+      - app1
+      - app2
+    volumes:
+      - ./app/static:/app/static
+    ports:
+      - 9999:8080
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: '30MB'
+  db:
+    build:
+      context: ./db/
+    volumes:
+      - ./db/script.sql:/docker-entrypoint-initdb.d/script.sql
+    deploy:
+      resources:
+        limits:
+          cpus: '0.56'
+          memory: '200MB'
+    env_file:
+        - .env
